@@ -1,0 +1,192 @@
+Identification of haplotype clusters for GIRAFFE gene in the Medicago HapMap
+================================================================================
+
+**Author:** John Stanton-Geddes
+**Date:** 4 September 2014
+
+## Summary
+
+The goal of this bioinformatic analysis is to determine the number of haplotype clusters that exist for a heme oxygenase gene, Medtr8g019302.1, that was annotated in the Medicago truncatula 4.0 genome. This gene, named GIRAFFE, has been studied in the Harris lab as it has strong effects on plant architecture and nodulation.
+
+## Data
+
+First, I downloaded the file containing Mt4.0v1 annotation SNPs for chromosome 8 from the GWAS accessions (262) from the Medicago HapMap website (http://www.medicagohapmap.org/downloads/mt40). The SNP file is in the binary variant call format (BCF) described [here](http://www.1000genomes.org/wiki/analysis/variant-call-format/bcf-binary-vcf-version-2). I also downloaded the `bcf.csi` file which is needed for `bcftools` filtering of the file.
+
+```{r download, cache=TRUE}
+chr <- "8"
+site <- "6779092-6783193"
+
+file <- paste("chr", chr, "-filtered-set-2014Apr15.bcf", sep="")
+
+if(!file.exists(file)) {
+    system('wget http://www.medicagohapmap.org/downloads/Mt40/snps_by_chr//chr8-filtered-set-2014Apr15.bcf')
+    system('wget http://www.medicagohapmap.org/downloads/Mt40/snps_by_chr//chr8-filtered-set-2014Apr15.bcf.csi')
+} else print("File already downloaded!")
+```
+
+Next, I used [bcftools](http://samtools.github.io/bcftools/) to extract SNPs from the region containing the GIRAFFE gene. This requires that bcftools are installed and available system-wide.
+
+```{r extract, cache=TRUE, eval=FALSE}
+system('bcftools view -f PASS -r chr8:6779092-6783193 -O v -o chr8_GIRAFFE.vcf chr8-filtered-set-2014Apr15.bcf')
+
+system('bcftools query -H -r chr8:6779092-6783193 -f "%CHROM\t%POS[\t%TGT]\n" chr8-filtered-set-2014Apr15.bcf > Medtr8g_GIRAFFE.txt')
+```
+
+To identify haplotypes, I used the program [Beagle](http://faculty.washington.edu/browning/beagle/beagle.html). First, I had to convert the VCF file to BEAGLE format using `vcf2beagle` [utility program](http://faculty.washington.edu/browning/beagle_utilities/utilities.html#vcf2beagle).
+
+```{r vcf2beagle, cache=TRUE}
+system('cat chr8_GIRAFFE.vcf | java -jar vcf2beagle.jar ? chr8_GIRAFFE')
+```
+
+I ran BEAGLE on this file for haplotype imputation.
+
+```{r beagle, cache=TRUE}
+system('java -Xmx1000m -jar beagle.jar unphased=chr8_GIRAFFE.bgl.gz missing=? out=chr8_GIRAFFE')
+# extract file
+system('gunzip chr8_GIRAFFE.chr8_GIRAFFE.bgl.gz.phased.gz')
+```
+
+I loaded the imputed haplotypes file into R to determine how many unique haplotypes.
+
+```{r load_hap}
+giraffe.haps <- read.table("chr8_GIRAFFE.chr8_GIRAFFE.bgl.gz.phased", colClasses = "character")
+# tranpose
+t.giraffe.haps <- t(giraffe.haps)
+t.giraffe.haps <- t.giraffe.haps[-1, ]
+t.giraffe.haps[1:5,1:8]
+```
+
+As a simple first pass of diversity in this gene, I determined the number of unique haplotypes.
+
+```{r unique}
+haps.even <- list()
+haps.odd <- list()
+
+for(i in 1:nrow(t.giraffe.haps)) {
+    tmp <- paste(t.giraffe.haps[i,2:ncol(t.giraffe.haps)], collapse="")
+    if(i%%2 == 0) haps.even <- c(haps.even, tmp) else {
+        haps.odd <- c(haps.odd, tmp)
+    }
+}
+
+length(haps.even)
+length(haps.odd)
+
+length(unique(haps.even))
+length(unique(haps.odd))
+
+haps <- c(haps.even, haps.odd)
+length(unique(haps))
+```
+
+There are `r length(unique(haps))` unique haplotypes in the 262 samples (524 chromosomes).
+
+
+I use the R code available from [HaploSuite](http://www.statgen.nus.edu.sg/~software/haplosuite.html) to cluster and visualize the haplotypes.
+First, I format the data for use with `haplosim`, which requires filtering to bi-allelic SNPs and re-coding each SNP to 0/1.                                                                                                                                                                 
+```{r haplosuite_format}
+# convert to HapMap format
+haplo.data <- giraffe.haps[-1,-c(1,2)]
+# convert SNPs to 0/1 for each row
+
+haplo.mat <- matrix(nrow=0, ncol=ncol(haplo.data))
+
+for(i in 1:nrow(haplo.data)) {
+    tmp <- as.list(haplo.data[i,])
+    chars <- unique(as.list(tmp))
+    if(length(chars)==2) {
+        tmp[which(unlist(tmp)==chars[1])] <- 0
+        tmp[which(unlist(tmp)==chars[2])] <- 1
+        haplo.mat <- rbind(haplo.mat, as.vector(unlist(tmp)))
+    }
+}
+
+haplo.mat <- as.data.frame(haplo.mat)
+haplo.mat[1:10, 1:5]
+
+library(stringr)
+position <- giraffe.haps[-1,2]
+position <- str_split_fixed(position, ":", n=2)[,2]
+```
+
+With the formatted data, I know use the `haplosim` function to cluster haplotypes.
+
+
+```{r haplosim}
+# load functions
+source("haplosim.r")
+
+distance.measure="physical"
+
+haplosim.out <- haplosim(haplo.mat, position, miss.code=9, snp.miss=NULL, focal=FALSE,
+    focal.flag=NA, focal.weight=-1, distance.measure=distance.measure, n.hap="auto",
+    tolerance=1, sticky=5)
+
+names(haplosim.out)
+table(haplosim.out$hap.group)
+```
+
+Haplotype clustering reveals 2 clusters, with 46 accessions in cluster 1, 26 in cluster 2, and 27 that cannot be assigned to either cluster.
+
+Next, I visualize these clusters using code provided from [HaploSuite](http://www.statgen.nus.edu.sg/~software/haplosuite.html).
+
+                                                                                                                                                                                                      ```{r hapvisual}
+######################################################
+### HAPVISUAL - METHOD FOR HAPLOTYPE VISUALIZATION ###
+######################################################
+# haplosim.out = output from haplosim
+# k = number of subpopulations to split the input
+# k.vis = which subpopulation to visualize
+# k.flag = vector of integers from 1 to k, denoting the subpopulation membership of each chromosome, ignored if k = 1
+# type = type of clustering to perform ("unsorted", "simple", "stepwise", "kmeans", "haplosim"), default to "haplosim"
+# col = names of 2 colors corresponding to the two possible alleles, default at "yellow" and "green"
+# col.haplosim = color palette corresponding to the numbers for haplosim cluster, currently using default colors up to 9 colors, with grey representing missing values. 
+# title = names of subpopulations, must be of the same size as k, otherwise NULL
+
+k = 1
+k.vis = 1
+k.flag = 1
+type = "haplosim"
+col = "default"
+col.hap = "default"
+title = "MtHAPMAP GIRAFFE gene clusters"
+
+### 
+require(lattice)
+if (k == 1) k.vis <- 1	
+n.snp <- haplosim.out$n.snp
+if (col == "default") col <- c("yellow", "green")
+if (col.hap == "default") col.hap <- colorRampPalette(c("grey", "BlueViolet", "orange", "cyan", "Green", "PeachPuff", "yellow", "brown", "salmon", "SeaGreen")[1:(haplosim.out$n.hap+1)], space = "Lab")
+if (k == 1) k.flag <- rep(1, haplosim.out$n.chr); k.flag.sort <- k.flag
+input.draw <- haplosim.out$unsorted
+if (type == "unsorted") input.draw <- input.draw; k.flag.sort <- k.flag
+if (type == "simple"){
+   input.draw <- input.draw[haplosim.out$simple.ranking,]
+   k.flag.sort <- k.flag[haplosim.out$simple.ranking]
+}   
+if (type == "stepwise"){
+   input.draw[haplosim.out$stepwise.ranking,] <- input.draw
+   k.flag.sort <- k.flag
+   k.flag.sort[haplosim.out$stepwise.ranking] <- k.flag
+}
+if (type == "kmeans"){ 
+   input.draw <- haplosim.out$kmeans.unsorted
+   input.draw <- input.draw[haplosim.out$kmeans.ranking,]
+   k.flag.sort <- k.flag[haplosim.out$kmeans.ranking]
+}
+if (type == "haplosim"){
+   input.draw <- haplosim.out$haplosim.unsorted
+   input.draw[haplosim.out$hap.ranking,] <- input.draw
+   k.flag.sort <- k.flag
+   k.flag.sort[haplosim.out$hap.ranking] <- k.flag
+}
+flag.k <- which(k.flag.sort == k.vis)
+n.chr.k <- length(flag.k)
+output.draw <- input.draw[flag.k,]
+if (is.element(type, c("unsorted", "simple", "stepwise"))) levelplot(abs(c(unlist(output.draw))-0.001) ~ rep(1:n.snp, each = n.chr.k) + rep(1:n.chr.k, n.snp), at = seq(0, 1, length = 101), colorkey = F, col.regions = col, xlab = "SNP", ylab = "Chromosome", main = title[k.vis])
+if (is.element(type, c("kmeans", "haplosim"))) levelplot(abs(c(unlist(output.draw))-0.001) ~ rep(1:n.snp, each = n.chr.k) + rep(1:n.chr.k, n.snp), at = seq(0, haplosim.out$n.hap, length = 101), colorkey = F, col.regions = col.hap(100), xlab = "SNP", ylab = "Chromosome", main = title[k.vis])
+print(paste("Separate chromosomes into ", k, " subpopulations...", sep=""));print(paste("Clustering haplotypes using method ", type, "...", sep=""));print(paste("Plotting clustering for subpopulation ", k.vis, " with ", n.chr.k, " chromosomes.", sep=""))
+```
+
+
+                                                                                                                                                                                                    
