@@ -26,30 +26,58 @@ if(!file.exists(file)) {
 
 Next, I used [bcftools](http://samtools.github.io/bcftools/) to extract SNPs from the region containing the GIRAFFE gene. This requires that bcftools are installed and available system-wide.
 
-```{r extract, cache=TRUE, eval=FALSE}
-system(paste('bcftools view -f PASS -r chr' chr' 8:'site.range' -O v -o chr8_GIRAFFE.vcf ' file, sep=""')
+```{r txt_query}
+txt.out <- paste("chr", chr, "_", site.range, ".txt", sep="")
+system(paste('bcftools query -H -r chr', chr,':' , site.range,' -f "%CHROM\t%POS[\t%TGT]\n" ', file, " > ", txt.out, sep=""))
+```
 
-system('bcftools query -H -r chr8:6779092-6783193 -f "%CHROM\t%POS[\t%TGT]\n" chr8-filtered-set-2014Apr15.bcf > Medtr8g_GIRAFFE.txt')
+Examination of this file revealed a number of SNPs that are heterozygous within accessions.
+
+```{r snp_check}
+haplo.data <- read.table(txt.out)
+t.haplo.data <- t(haplo.data[,2:ncol(haplo.data)])
+colnames(t.haplo.data) <- paste("snp", t.haplo.data[1,], sep="")
+t.haplo.data <- t.haplo.data[-1,]
+
+# identify sites heterozygous within accessions
+t.haplo.data[which(t.haplo.data == "A/C")]
+t.haplo.data[which(t.haplo.data == "A/G")]
+t.haplo.data[which(t.haplo.data == "A/T")]
+t.haplo.data[which(t.haplo.data == "C/A")]
+t.haplo.data[which(t.haplo.data == "C/G")]
+t.haplo.data[which(t.haplo.data == "C/T")]
+t.haplo.data[which(t.haplo.data == "T/A")]
+t.haplo.data[which(t.haplo.data == "T/C")]
+t.haplo.data[which(t.haplo.data == "T/G")]
+```
+
+Given evidence for heterozygous sites, phase data prior to haplotype clustering. 
+
+```{r vcf_query}
+vcf.out <- paste("chr", chr, "_", site.range, ".vcf", sep="")
+system(paste('bcftools view -f PASS -r chr', chr,':' , site.range,' -O v -o ', vcf.out, " ", file, sep=""))
 ```
 
 To identify haplotypes, I used the program [Beagle](http://faculty.washington.edu/browning/beagle/beagle.html). First, I had to convert the VCF file to BEAGLE format using `vcf2beagle` [utility program](http://faculty.washington.edu/browning/beagle_utilities/utilities.html#vcf2beagle).
 
 ```{r vcf2beagle, cache=TRUE}
-system('cat chr8_GIRAFFE.vcf | java -jar vcf2beagle.jar ? chr8_GIRAFFE')
+beagle.out <- paste("chr", chr, "_", site.range, sep="")
+system(paste('cat ', vcf.out, ' | java -jar vcf2beagle.jar ? ', beagle.out, sep=""))
 ```
 
 I ran BEAGLE on this file for haplotype imputation.
 
 ```{r beagle, cache=TRUE}
-system('java -Xmx1000m -jar beagle.jar unphased=chr8_GIRAFFE.bgl.gz missing=? out=chr8_GIRAFFE')
+system(paste('java -Xmx1000m -jar beagle.jar unphased=', paste(beagle.out, ".bgl.gz", sep=""), ' missing=? out=imp', sep=""))
 # extract file
-system('gunzip chr8_GIRAFFE.chr8_GIRAFFE.bgl.gz.phased.gz')
+system(paste('gunzip ', paste("imp.", beagle.out, ".bgl.gz.phased.gz", sep=""), sep=""))
 ```
 
 I loaded the imputed haplotypes file into R to determine how many unique haplotypes.
 
 ```{r load_hap}
-giraffe.haps <- read.table("chr8_GIRAFFE.chr8_GIRAFFE.bgl.gz.phased", colClasses = "character")
+giraffe.haps <- read.table(paste("imp.", beagle.out, ".bgl.gz.phased", sep=""), colClasses="character")
+
 # tranpose
 t.giraffe.haps <- t(giraffe.haps)
 t.giraffe.haps <- t.giraffe.haps[-1, ]

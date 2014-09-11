@@ -1,3 +1,12 @@
+# file types to ignore
 .Rproj.user
-.Rhistory
-.RData
+*.Rhistory
+*.RData
+*.gz
+*.jar
+*.html
+
+# directories to ignore
+data
+scripts
+results
