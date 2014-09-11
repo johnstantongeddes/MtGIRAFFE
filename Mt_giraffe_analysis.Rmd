@@ -14,7 +14,7 @@ First, I downloaded the file containing Mt4.0v1 annotation SNPs for chromosome 8
 
 ```{r download, cache=TRUE}
 chr <- "8"
-site <- "6779092-6783193"
+site.range <- "6779092-6783193"
 
 file <- paste("chr", chr, "-filtered-set-2014Apr15.bcf", sep="")
 
@@ -27,7 +27,7 @@ if(!file.exists(file)) {
 Next, I used [bcftools](http://samtools.github.io/bcftools/) to extract SNPs from the region containing the GIRAFFE gene. This requires that bcftools are installed and available system-wide.
 
 ```{r extract, cache=TRUE, eval=FALSE}
-system('bcftools view -f PASS -r chr8:6779092-6783193 -O v -o chr8_GIRAFFE.vcf chr8-filtered-set-2014Apr15.bcf')
+system(paste('bcftools view -f PASS -r chr' chr' 8:'site.range' -O v -o chr8_GIRAFFE.vcf ' file, sep=""')
 
 system('bcftools query -H -r chr8:6779092-6783193 -f "%CHROM\t%POS[\t%TGT]\n" chr8-filtered-set-2014Apr15.bcf > Medtr8g_GIRAFFE.txt')
 ```
@@ -118,12 +118,15 @@ source("haplosim.r")
 
 distance.measure="physical"
 
-haplosim.out <- haplosim(haplo.mat, position, miss.code=9, snp.miss=NULL, focal=FALSE,
+haplosim.out <- haplosim(t(haplo.mat), position, miss.code=9, snp.miss=NULL, focal=FALSE,
     focal.flag=NA, focal.weight=-1, distance.measure=distance.measure, n.hap="auto",
     tolerance=1, sticky=5)
 
 names(haplosim.out)
 table(haplosim.out$hap.group)
+
+hapgroup <- cbind(t.giraffe.haps[-1,1], haplosim.out$hap.group)
+head(hapgroup)
 ```
 
 Haplotype clustering reveals 2 clusters, with 46 accessions in cluster 1, 26 in cluster 2, and 27 that cannot be assigned to either cluster.
