@@ -1,5 +1,5 @@
 # file types to ignore
-.Rproj.user
+*.Rproj
 *.Rhistory
 *.RData
 *.gz
@@ -8,5 +8,6 @@
 
 # directories to ignore
 data
-scripts
+bin
 results
+.Rproj.user
