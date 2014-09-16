@@ -6,7 +6,9 @@ Identification of haplotype clusters for GIRAFFE gene in the Medicago HapMap
 
 ## Summary
 
-The goal of this bioinformatic analysis is to determine the number of haplotype clusters that exist for a heme oxygenase gene, Medtr8g019302.1, that was annotated in the Medicago truncatula 4.0 genome. This gene, named GIRAFFE, has been studied in the Harris lab as it has strong effects on plant architecture and nodulation.
+The goal of this bioinformatic analysis is to determine the number of haplotype clusters that exist for a heme oxygenase gene, Medtr8g019302.1, that was annotated in the Medicago truncatula 4.0 genome. This gene, named GIRAFFE, has been studied in the Harris lab as it has effects on plant development and nodulation[^1].
+
+[^1] http://www.uvm.edu/~plantbio/harris.screen.php
 
 ## Data
 
@@ -15,8 +17,9 @@ First, I downloaded the file containing Mt4.0v1 annotation SNPs for chromosome 8
 ```{r download, cache=TRUE}
 chr <- "8"
 site.range <- "6779092-6783193"
+datadir <- "data/"
 
-file <- paste("chr", chr, "-filtered-set-2014Apr15.bcf", sep="")
+file <- paste(datadir, "chr", chr, "-filtered-set-2014Apr15.bcf", sep="")
 
 if(!file.exists(file)) {
     system('wget http://www.medicagohapmap.org/downloads/Mt40/snps_by_chr//chr8-filtered-set-2014Apr15.bcf')
@@ -27,8 +30,8 @@ if(!file.exists(file)) {
 Next, I used [bcftools](http://samtools.github.io/bcftools/) to extract SNPs from the region containing the GIRAFFE gene. This requires that bcftools are installed and available system-wide.
 
 ```{r txt_query}
-txt.out <- paste("chr", chr, "_", site.range, ".txt", sep="")
-system(paste('bcftools query -H -r chr', chr,':' , site.range,' -f "%CHROM\t%POS[\t%TGT]\n" ', file, " > ", txt.out, sep=""))
+txt.out <- paste(datadir, "chr", chr, "_", site.range, ".txt", sep="")
+system(paste('bcftools query -H -r chr', chr,':' , site.range," -f '%CHROM\t%POS[\t%TGT]\n' ", file, " > ", txt.out, sep=""))
 ```
 
 Examination of this file revealed a number of SNPs that are heterozygous within accessions.
@@ -54,35 +57,56 @@ t.haplo.data[which(t.haplo.data == "T/G")]
 Given evidence for heterozygous sites, phase data prior to haplotype clustering. 
 
 ```{r vcf_query}
-vcf.out <- paste("chr", chr, "_", site.range, ".vcf", sep="")
+vcf.out <- paste(datadir, "chr", chr, "_", site.range, ".vcf", sep="")
 system(paste('bcftools view -f PASS -r chr', chr,':' , site.range,' -O v -o ', vcf.out, " ", file, sep=""))
 ```
 
 To identify haplotypes, I used the program [Beagle](http://faculty.washington.edu/browning/beagle/beagle.html). First, I had to convert the VCF file to BEAGLE format using `vcf2beagle` [utility program](http://faculty.washington.edu/browning/beagle_utilities/utilities.html#vcf2beagle).
 
 ```{r vcf2beagle, cache=TRUE}
-beagle.out <- paste("chr", chr, "_", site.range, sep="")
-system(paste('cat ', vcf.out, ' | java -jar vcf2beagle.jar ? ', beagle.out, sep=""))
+beagle.out <- paste(datadir, "chr", chr, "_", site.range, sep="")
+system(paste('cat ', vcf.out, ' | java -jar scripts/vcf2beagle.jar ? ', beagle.out, sep=""))
 ```
 
 I ran BEAGLE on this file for haplotype imputation.
 
 ```{r beagle, cache=TRUE}
-system(paste('java -Xmx1000m -jar beagle.jar unphased=', paste(beagle.out, ".bgl.gz", sep=""), ' missing=? out=imp', sep=""))
+system(paste('java -Xmx1000m -jar scripts/beagle.jar unphased=', paste(beagle.out, ".bgl.gz", sep=""), ' missing=? out=imp', sep=""))
 # extract file
-system(paste('gunzip ', paste("imp.", beagle.out, ".bgl.gz.phased.gz", sep=""), sep=""))
+system('mv imp* data/.')
+system(paste('gunzip ', datadir, "imp.chr", chr, "_", site.range, ".bgl.gz.phased.gz", sep=""))
 ```
 
-I loaded the imputed haplotypes file into R to determine how many unique haplotypes.
+I loaded the imputed haplotypes file into R to determine how many unique haplotypes. First I had to filter out the non-variable site that were in the VCF files.
 
 ```{r load_hap}
-giraffe.haps <- read.table(paste("imp.", beagle.out, ".bgl.gz.phased", sep=""), colClasses="character")
+giraffe.haps <- read.table(paste(datadir, "imp.chr", chr, "_", site.range, ".bgl.gz.phased", sep=""), colClasses="character")
+colnames(giraffe.haps) <- giraffe.haps[1,]
+rownames(giraffe.haps) <- giraffe.haps[,2]
+giraffe.haps <- giraffe.haps[-1,-c(1:2)]
+
+giraffe.haps2 <- matrix(nrow=0, ncol=ncol(giraffe.haps))
+colnames(giraffe.haps2) <- colnames(giraffe.haps)
+
+# filter out non-variable sites
+rowiter <- 1
+for(i in 1:nrow(giraffe.haps)) {
+    tmp <- as.character(unlist(giraffe.haps[i,]))
+    chars <- unique(tmp)
+    if(length(chars)>1) {
+      giraffe.haps2 <- rbind(giraffe.haps2, tmp)
+      rownames(giraffe.haps2)[rowiter] <- rownames(giraffe.haps)[i]   
+      rowiter <- rowiter + 1
+      }
+    }
+
+dim(giraffe.haps2)
 
 # tranpose
-t.giraffe.haps <- t(giraffe.haps)
-t.giraffe.haps <- t.giraffe.haps[-1, ]
+t.giraffe.haps <- t(giraffe.haps2)
 t.giraffe.haps[1:5,1:8]
 ```
+
 
 As a simple first pass of diversity in this gene, I determined the number of unique haplotypes.
 
@@ -114,18 +138,15 @@ I use the R code available from [HaploSuite](http://www.statgen.nus.edu.sg/~soft
 First, I format the data for use with `haplosim`, which requires filtering to bi-allelic SNPs and re-coding each SNP to 0/1.                                                                                                                                                                 
 ```{r haplosuite_format}
 # convert to HapMap format
-haplo.data <- giraffe.haps[-1,-c(1,2)]
-# convert SNPs to 0/1 for each row
+haplo.mat <- matrix(nrow=0, ncol=ncol(giraffe.haps2))
 
-haplo.mat <- matrix(nrow=0, ncol=ncol(haplo.data))
-
-for(i in 1:nrow(haplo.data)) {
-    tmp <- as.list(haplo.data[i,])
-    chars <- unique(as.list(tmp))
+for(i in 1:nrow(giraffe.haps2)) {
+    tmp <- as.character(unlist(giraffe.haps2[i,]))
+    chars <- unique(tmp)
     if(length(chars)==2) {
-        tmp[which(unlist(tmp)==chars[1])] <- 0
-        tmp[which(unlist(tmp)==chars[2])] <- 1
-        haplo.mat <- rbind(haplo.mat, as.vector(unlist(tmp)))
+        tmp[which(tmp==chars[1])] <- 0
+        tmp[which(tmp==chars[2])] <- 1
+        haplo.mat <- rbind(haplo.mat, as.vector(tmp))
     }
 }
 
@@ -142,11 +163,11 @@ With the formatted data, I know use the `haplosim` function to cluster haplotype
 
 ```{r haplosim}
 # load functions
-source("haplosim.r")
+source("R/haplosim.R")
 
 distance.measure="physical"
 
-haplosim.out <- haplosim(t(haplo.mat), position, miss.code=9, snp.miss=NULL, focal=FALSE,
+haplosim.out <- haplosim(haplo.mat, position, miss.code=9, snp.miss=NULL, focal=FALSE,
     focal.flag=NA, focal.weight=-1, distance.measure=distance.measure, n.hap="auto",
     tolerance=1, sticky=5)
 

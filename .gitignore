@@ -8,5 +8,5 @@
 
 # directories to ignore
 data
-scripts
+bin
 results
