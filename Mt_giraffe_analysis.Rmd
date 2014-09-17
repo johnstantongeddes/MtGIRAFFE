@@ -46,19 +46,22 @@ t.haplo.data <- t(haplo.data[,2:ncol(haplo.data)])
 colnames(t.haplo.data) <- paste("snp", t.haplo.data[1,], sep="")
 t.haplo.data <- t.haplo.data[-1,]
 
-# identify sites heterozygous within accessions
-t.haplo.data[which(t.haplo.data == "A/C")]
-t.haplo.data[which(t.haplo.data == "A/G")]
-t.haplo.data[which(t.haplo.data == "A/T")]
-t.haplo.data[which(t.haplo.data == "C/A")]
-t.haplo.data[which(t.haplo.data == "C/G")]
-t.haplo.data[which(t.haplo.data == "C/T")]
-t.haplo.data[which(t.haplo.data == "T/A")]
-t.haplo.data[which(t.haplo.data == "T/C")]
-t.haplo.data[which(t.haplo.data == "T/G")]
+hz <- c("A/C", "A/G", "A/T", "C/A", "C/G", "C/T", "T/A", "T/C", "T/G")
+
+t.haplo.data[which(t.haplo.data %in% hz)]
+
+hz.pos <- which(t.haplo.data %in% hz)
+
+hz.col <- as.integer(hz.pos/nrow(t.haplo.data))+1
+hz.row <- hz.pos%%nrow(t.haplo.data)
+
+# check
+t.haplo.data[hz.row[1], hz.col[1]]
+t.haplo.data[hz.row[5], hz.col[5]]
+t.haplo.data[hz.row[10], hz.col[10]]
 ```
 
-Given evidence for heterozygous sites, phase data prior to haplotype clustering. 
+`r length(unique(hz.row))` accessions contain heterozygous SNPs, and `r length(unique(hz.col))` SNPs are heterozygous in at least one accession. Given this (unexpected) evidence for heterozygous sites, I phase the data prior to haplotype clustering. 
 
 ```{r vcf_query}
 vcf.out <- paste(datadir, "chr", chr, "_", site.range, ".vcf", sep="")
