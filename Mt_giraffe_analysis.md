@@ -2,6 +2,7 @@ Identification of haplotype clusters for GIRAFFE gene in the Medicago HapMap
 ================================================================================
 
 **Author:** John Stanton-Geddes
+
 **Date:** 16 September 2014
 
 ## Summary
@@ -18,7 +19,13 @@ First, I downloaded the file containing Mt4.0v1 annotation SNPs for chromosome 8
 ```r
 library(stringr)
 library(plyr)
+library(knitr)
 
+opts_chunk$set(cache=TRUE)
+```
+
+
+```r
 chr <- "8"
 site.range <- "6779092-6783193"
 datadir <- "data/"
@@ -52,64 +59,24 @@ t.haplo.data <- t(haplo.data[,2:ncol(haplo.data)])
 colnames(t.haplo.data) <- paste("snp", t.haplo.data[1,], sep="")
 t.haplo.data <- t.haplo.data[-1,]
 
-# identify sites heterozygous within accessions
-t.haplo.data[which(t.haplo.data == "A/C")]
+hz <- c("A/C", "A/G", "A/T", "C/A", "C/G", "C/T", "T/A", "T/C", "T/G")
+
+t.haplo.data[which(t.haplo.data %in% hz)]
 ```
 
 ```
-## [1] "A/C" "A/C" "A/C" "A/C"
-```
-
-```r
-t.haplo.data[which(t.haplo.data == "A/G")]
-```
-
-```
-## [1] "A/G" "A/G" "A/G"
+##  [1] "T/C" "C/A" "T/A" "T/A" "C/G" "C/G" "A/T" "A/T" "A/G" "A/C" "A/C"
+## [12] "A/C" "C/T" "A/G" "A/G" "A/C" "C/A" "C/G" "C/G" "T/G" "C/G" "C/T"
 ```
 
 ```r
-t.haplo.data[which(t.haplo.data == "A/T")]
-```
+hz.pos <- which(t.haplo.data %in% hz)
 
-```
-## [1] "A/T" "A/T"
-```
+hz.col <- as.integer(hz.pos/nrow(t.haplo.data))+1
+hz.row <- hz.pos%%nrow(t.haplo.data)
 
-```r
-t.haplo.data[which(t.haplo.data == "C/A")]
-```
-
-```
-## [1] "C/A" "C/A"
-```
-
-```r
-t.haplo.data[which(t.haplo.data == "C/G")]
-```
-
-```
-## [1] "C/G" "C/G" "C/G" "C/G" "C/G"
-```
-
-```r
-t.haplo.data[which(t.haplo.data == "C/T")]
-```
-
-```
-## [1] "C/T" "C/T"
-```
-
-```r
-t.haplo.data[which(t.haplo.data == "T/A")]
-```
-
-```
-## [1] "T/A" "T/A"
-```
-
-```r
-t.haplo.data[which(t.haplo.data == "T/C")]
+# check
+t.haplo.data[hz.row[1], hz.col[1]]
 ```
 
 ```
@@ -117,14 +84,71 @@ t.haplo.data[which(t.haplo.data == "T/C")]
 ```
 
 ```r
-t.haplo.data[which(t.haplo.data == "T/G")]
+t.haplo.data[hz.row[5], hz.col[5]]
 ```
 
 ```
-## [1] "T/G"
+## [1] "C/G"
 ```
 
-Given evidence for heterozygous sites, phase data prior to haplotype clustering. 
+```r
+t.haplo.data[hz.row[10], hz.col[10]]
+```
+
+```
+## [1] "A/C"
+```
+
+12 accessions contain heterozygous SNPs, and 12 SNPs are heterozygous in at least one accession.
+
+Are het SNPs clustered?
+
+
+```r
+unique(hz.col)
+```
+
+```
+##  [1]  20  36  62  83 118 141 150 159 160 161 162 163 165 209 251 292 311
+## [18] 317
+```
+
+Yes, appears to be a group from 150-165.
+
+Are het SNPs the segregating alleles at that site, or rare polymorphism?
+
+
+```r
+for(i in 1:length(unique(hz.col))) print(unique(t.haplo.data[,unique(hz.col)[i]]))
+```
+
+```
+## [1] "T/C" "C/C" "T/T" "./."
+## [1] "C/C" "./." "A/A" "C/A"
+## [1] "T/T" "A/A" "./." "T/A"
+## [1] "C/C" "G/G" "./." "C/G"
+## [1] "A/A" "T/T" "./." "A/T"
+## [1] "A/A" "./." "A/G"
+## [1] "A/A" "A/C" "./."
+## [1] "A/A" "./." "A/C"
+## [1] "C/C" "./." "C/T"
+## [1] "A/A" "./." "A/G"
+## [1] "A/A" "./." "A/G"
+## [1] "A/A" "./." "A/C"
+## [1] "C/C" "./." "C/A"
+## [1] "C/C" "G/G" "./." "C/G"
+## [1] "C/C" "G/G" "C/G" "./."
+## [1] "T/T" "G/G" "./." "T/G"
+## [1] "G/G" "C/C" "./." "C/G"
+## [1] "C/C" "T/T" "./." "C/T"
+```
+
+For the first 5 and last 5 het SNPs, the het site is polymorphic for the segregating alleles at that site (e.g. possible SNPS are T/T, C/C, T/C) . For the middle 8 (interestingly, the ones that appeared clustered), the het site is unique (e.g. A/A, A/C). So it looks like some of both are going on.
+
+Given this (unexpected) evidence for heterozygous sites, I phase the data prior to haplotype clustering. 
+
+
+
 
 
 ```r

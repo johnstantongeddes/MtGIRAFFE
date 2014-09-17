@@ -15,10 +15,15 @@ The goal of this bioinformatic analysis is to determine the number of haplotype 
 
 First, I downloaded the file containing Mt4.0v1 annotation SNPs for chromosome 8 from the GWAS accessions (262) from the Medicago HapMap website (http://www.medicagohapmap.org/downloads/mt40). The SNP file is in the binary variant call format (BCF) described [here](http://www.1000genomes.org/wiki/analysis/variant-call-format/bcf-binary-vcf-version-2). I also downloaded the `bcf.csi` file which is needed for `bcftools` filtering of the file.
 
-```{r download, cache=TRUE}
+```{r setup}
 library(stringr)
 library(plyr)
+library(knitr)
 
+opts_chunk$set(cache=TRUE)
+```
+
+```{r download}
 chr <- "8"
 site.range <- "6779092-6783193"
 datadir <- "data/"
@@ -61,7 +66,28 @@ t.haplo.data[hz.row[5], hz.col[5]]
 t.haplo.data[hz.row[10], hz.col[10]]
 ```
 
-`r length(unique(hz.row))` accessions contain heterozygous SNPs, and `r length(unique(hz.col))` SNPs are heterozygous in at least one accession. Given this (unexpected) evidence for heterozygous sites, I phase the data prior to haplotype clustering. 
+`r length(unique(hz.row))` accessions contain heterozygous SNPs, and `r length(unique(hz.row))` SNPs are heterozygous in at least one accession.
+
+Are het SNPs clustered?
+
+```{r het_cluster}
+unique(hz.col)
+```
+
+Yes, appears to be a group from 150-165.
+
+Are het SNPs the segregating alleles at that site, or rare polymorphism?
+
+```{r het_SNPs}
+for(i in 1:length(unique(hz.col))) print(unique(t.haplo.data[,unique(hz.col)[i]]))
+```
+
+For the first 5 and last 5 het SNPs, the het site is polymorphic for the segregating alleles at that site (e.g. possible SNPS are T/T, C/C, T/C) . For the middle 8 (interestingly, the ones that appeared clustered), the het site is unique (e.g. A/A, A/C). So it looks like some of both are going on.
+
+Given this (unexpected) evidence for heterozygous sites, I phase the data prior to haplotype clustering. 
+
+
+
 
 ```{r vcf_query}
 vcf.out <- paste(datadir, "chr", chr, "_", site.range, ".vcf", sep="")
